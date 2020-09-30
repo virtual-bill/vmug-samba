@@ -13,7 +13,7 @@ As part of the VMUG 2020 season, I developed a session called **Home Lab Resourc
 3. Lab environment to deploy in
 
 ## Instructions
-In order for you to leverage the code in this repository, you'll need a couple of things in place:
+In order for you to leverage the code in this repository (see **commands.txt**), you'll need a couple of things in place:
 
 - Server deployed using Ubuntu 18.04
 - Server with access to Ubuntu repositories
