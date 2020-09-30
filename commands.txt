@@ -1,0 +1,100 @@
+### THIS IS NOT AN EXECUTABLE SCRIPT. RATHER, IT IS A SERIES OF COMMANDS YOU MAY WANT TO RUN IN YOUR ENVIRONMENT TO DEPLOY A SAMBA-BASED DOMAIN CONTROLLER.
+### THERE ARE PLACES BELOW WHERE YOU WILL NEED TO MAKE CHANGES TO RUN IN YOUR ENVIRONMENT. 
+
+### The following code is making some assumptions. Adjust as appropriate
+###### Ubuntu 18.04 server as the base server distribution
+###### Server named: VMUGDC01.vb.info
+###### Server configured with static IP address
+###### Server has access through security devices to directly access Ubuntu package repositories
+###### vCenter has access through security devices to communicate with Samba domain controller
+
+
+# Install Required Packages
+sudo apt-get install samba krb5-user krb5-config winbind libpam-winbind libnss-winbind
+
+# Setup Samba AD DS
+## Prep Samba Services
+sudo systemctl stop samba-ad-dc.service smbd.service nmbd.service winbind.service
+sudo systemctl disable samba-ad-dc.service smbd.service nmbd.service winbind.service
+sudo mv /etc/samba/smb.conf /etc/samba/smb.conf.initial
+
+## Provision Domain
+sudo samba-tool domain provision --use-rfc2307 --interactive
+  		 Realm [VB.INFO]: VB.INFO
+			 Domain [VB]: VB
+			 Server Role (dc, member, standalone) [dc]: dc
+			 DNS backend (SAMBA_INTERNAL, BIND9_FLATFILE, BIND9_DLZ, NONE) [SAMBA_INTERNAL]: SAMBA_INTERNAL
+			 DNS forwarder IP address (write 'none' to disable forwarding) [127.0.0.53]:
+			 Administrator password: ***********
+       Retype password: ***********
+
+## Remove Kerberos config file and replace with new Kerberos file
+sudo mv /etc/krb5.conf /etc/krb5.conf.initial
+sudo ln -s /var/lib/samba/private/krb5.conf /etc/
+
+## Stop systemd-resolved
+sudo systemctl stop systemd-resolved.service
+sudo systemctl disable systemd-resolved.service
+	
+## Setup DNS forwarding
+sudo vi /etc/samba/smb.conf
+		# Global parameters
+		[global]
+       dns forwarder = <IP Address Of DNS Resolver>
+       
+## Start Samba Services
+sudo systemctl unmask samba-ad-dc.service
+sudo systemctl start samba-ad-dc.service
+sudo systemctl status samba-ad-dc.service
+sudo systemctl enable samba-ad-dc.service
+
+## Verify functional level
+sudo samba-tool domain level show
+
+## Configure DNS
+sudo vi /etc/resolv.conf
+		search vb.info
+    nameserver <IP Address of this server> 
+
+## Query DNS
+host -t A vb.info
+host -t A tamlab-dc01.vb.info
+host -t SRV _kerberos._udp.vb.info
+host -t SRV _ldap._tcp.vb.info
+
+## Verify Kerberos
+sudo kinit administrator@VB.INFO
+sudo klist
+
+## Set password policy for password length to be 999
+sudo samba-tool domain passwordsettings set --max-pwd-age=999
+
+## Validate/show that the policy for password length has taken effect
+sudo kinit administrator@VB.INFO
+
+
+## Add vCenter user
+sudo samba-tool user create vcenter --given-name=vCenter --surname=User
+			New Password: ********
+			Retype Password: ********
+			User 'vcenter' created successfully
+      
+## Add Group
+sudo samba-tool group add "ESX Admins"
+
+## Add user to group
+sudo samba-tool group addmembers "ESX Admins" "vcenter"
+
+## Configure DNS A Records
+sudo samba-tool dns add vmugdc01 vb.info vmugvcenter A 192.168.86.151
+sudo samba-tool dns add vmugdc01 vb.info vmugesx01 A 192.168.86.152
+sudo samba-tool dns add vmugdc01 vb.info vmugwin01 A 192.168.86.153
+
+## Configure DNS Reverse Zone
+sudo samba-tool dns zonecreate vmugdc01 86.168.192.in-addr.arpa
+
+## Configure DNS PTR Records
+sudo samba-tool dns add vmugdc01 86.168.192.in-addr.arpa 150 PTR vmugdc01.vb.info
+sudo samba-tool dns add vmugdc01 86.168.192.in-addr.arpa 151 PTR vmugvcenter.vb.info
+sudo samba-tool dns add vmugdc01 86.168.192.in-addr.arpa 152 PTR vmugesx01.vb.info
+sudo samba-tool dns add vmugdc01 86.168.192.in-addr.arpa 153 PTR vmugwin01.vb.info
