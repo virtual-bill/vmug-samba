@@ -27,5 +27,5 @@ Unless you are running your lab in my environment (highly unlikely), you will ne
   - sudo samba-tool dns add **name of domain controller** **domain** **record hostname** A **IP_Address**
   - example: samba-tool dns add vmugdc01 vb.info vmugvcenter A 192.168.86.151
   
-  ## Presentation
-  The slide presentation is included in this repository under the **Content** directory
+## Presentation
+The slide presentation is included in this repository under the **Content** directory
